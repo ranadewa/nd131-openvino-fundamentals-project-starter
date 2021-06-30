@@ -35,11 +35,37 @@ class Network:
     """
 
     def __init__(self):
+        self.net = None
+        self.plugin = None
+        self.execNetwork = None
+        self.input_key = None
+        self.output_key = None
+        self.request_handle = None
+        self.latency = 0
         ### TODO: Initialize any class variables desired ###
 
-    def load_model(self):
+    def load_model(self, model_path, device, cpu_extension):
         ### TODO: Load the model ###
+        bin_path = model_path.split('.')[0] + '.bin'
+
+        self.net = IENetwork(model=model_path, weights=bin_path)
+        self.input_key = next(iter(self.net.inputs.keys()))
+        self.output_key = next(iter(self.net.outputs.keys()))
+        print('Model meta data: ')
+        print('\t input shape: {}'.format(self.net.inputs[self.input_key].shape))
+        print('\t output shape: {}'.format(self.net.outputs[self.output_key].shape))
+        self.plugin = IECore()
+        self.plugin.add_extension(cpu_extension, device)
+        self.execNetwork = self.plugin.load_network(self.net, device)
+        
         ### TODO: Check for supported layers ###
+        layerMap = self.plugin.query_network(self.net, device_name =device)
+        
+        for layer in layerMap.keys():
+            if (layer not in self.net.layers.keys()):
+                print("Unsupported layer found. Exiting")
+                return
+        
         ### TODO: Add any necessary extensions ###
         ### TODO: Return the loaded inference plugin ###
         ### Note: You may need to update the function parameters. ###
@@ -47,10 +73,13 @@ class Network:
 
     def get_input_shape(self):
         ### TODO: Return the shape of the input layer ###
-        return
+        return self.net.inputs[self.input_key].shape
 
-    def exec_net(self):
+    def exec_net(self, image):
         ### TODO: Start an asynchronous request ###
+        self.request_handle = self.execNetwork.start_async(0, inputs = {
+            self.input_key : image
+        })
         ### TODO: Return any necessary information ###
         ### Note: You may need to update the function parameters. ###
         return
@@ -59,9 +88,13 @@ class Network:
         ### TODO: Wait for the request to be complete. ###
         ### TODO: Return any necessary information ###
         ### Note: You may need to update the function parameters. ###
-        return
+        return self.request_handle.wait()
 
     def get_output(self):
         ### TODO: Extract and return the output results
         ### Note: You may need to update the function parameters. ###
-        return
+        self.latency += self.request_handle.latency
+        return self.request_handle.outputs[self.output_key]
+    
+    def get_latency(self):
+        return self.latency
