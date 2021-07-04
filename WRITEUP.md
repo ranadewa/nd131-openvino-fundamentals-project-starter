@@ -69,8 +69,8 @@ Following models were tried in order to identify a suitable candidate for the ap
     ```Bash
       python /opt/intel/openvino/deployment_tools/model_optimizer/mo_tf.py --input_model frozen_inference_graph.pb --reverse_input_channels --tensorflow_use_custom_operations_config/opt/intel/openvino/deployment_tools/model_optimizer/extensions/front/tf/ssd_v2_support.json --tensorflow_object_detection_api_pipeline_config pipeline.config
     ```
-  - The model was insufficient for the app because it took a long time to do the inferrence. The average inference time for this was 2680ms.  
-  <img src="images/ssd_resnet.png" width="200"/>
+  - The model was insufficient for the app because it took a long time to do the inferrence. The average inference time for this was 2680ms.    
+    <img src="images/ssd_resnet.png" width="400"/>
 
 - Model 2: [SSD Mobile Net V1]
   - [Model Source](http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v1_coco_2018_01_28.tar.gz)
