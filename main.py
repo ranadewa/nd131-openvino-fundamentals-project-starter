@@ -142,6 +142,7 @@ def infer_on_stream(args, client):
     total_people_count = 0
     detected_frame_count = 0
     ### TODO: Loop until stream is over ###
+    
     while(vid_capture.isOpened()):
         ### TODO: Read from the video capture ###
         ret_val, frame = vid_capture.read()
@@ -164,7 +165,7 @@ def infer_on_stream(args, client):
                     
                     current_people_count  += 1
                     detected_frame_count += 1
-                    
+                    total_people_count += 1
                     x_min = int(results[0, 0, index, 3] * frame.shape[1])
                     y_min = int(results[0, 0, index, 4] * frame.shape[0])
                     x_max = int(results[0, 0, index, 5] * frame.shape[1])
@@ -212,7 +213,9 @@ def infer_on_stream(args, client):
             break
             
     out.release()
-    log.info('Inference total latency in seconds: {}'.format(int(infer_network.get_total_latency()/1000)))
+    if(client):
+        client.disconnect()
+    print('Inference total latency in seconds: {}, average latency: {}, total inference count: {}'.format(int(infer_network.get_total_latency()/1000), int(infer_network.get_total_latency()/fcount), total_people_count))
 
 
 
