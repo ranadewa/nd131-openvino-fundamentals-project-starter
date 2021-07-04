@@ -24,7 +24,7 @@ During the implementation 3rd option was used. The absolute path for C++ library
 
 ## Comparing Model Performance
 
-In order to compare model performance, a separate python script (tensorflow_test.py) was written to run the tensor flow model in on the same **Pedestrian_Detect_2_1_1.mp4** video & following parameters were calculated for both original TF model & converted IR model.
+In order to compare model performance, a separate python script ([tensorflow_test.py](https://github.com/ranadewa/nd131-openvino-fundamentals-project-starter/blob/master/tensorflow_test.py)) was written to run the tensor flow model in on the same **Pedestrian_Detect_2_1_1.mp4** video & following parameters were calculated for both original TF model & converted IR model.
 - inference time : Used inference execution times for each model
 - accuracy : Number of frames detected with people in total frames of 1394
 - model size : Taken from the directory model resides in
