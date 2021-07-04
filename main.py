@@ -73,11 +73,20 @@ def build_argparser():
                         "(0.5 by default)")
     return parser
 
-
+def on_connect(client, userdata, rc):
+    log.info("Connected with the result code: " + str(rc))
+    
 def connect_mqtt():
     ### TODO: Connect to the MQTT client ###
-    client = None
-
+    client = None;
+    try:
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
+        client.loop()
+    except:
+        log.error("Exception in creation mqtt")
+        
     return client
 
 def pre_process(image, height, width):
@@ -86,41 +95,52 @@ def pre_process(image, height, width):
     processed_image = np.expand_dims(processed_image, axis = 0)
     return processed_image
 
+def parse_input_type(args):
+    isImage = False
+    if(args.input != -1): # -1 defined to be camera
+        input = args.input
+        
+        if input.split('.')[1] == 'mp4':
+            pass
+        else:
+            isImage = True
+    else:
+        input = -1
+    
+    return input, isImage
+
 def infer_on_stream(args, client):
-    """
-    Initialize the inference network, stream video to network,
-    and output stats and video.
-
-    :param args: Command line arguments parsed by `build_argparser()`
-    :param client: MQTT client
-    :return: None
-    """
-    # Initialise the class
+    input, isImage = parse_input_type(args)
+    
     infer_network = Network()
-    # Set Probability threshold for detections
-    prob_threshold = args.prob_threshold
-
-    ### TODO: Load the model through `infer_network` ###
     infer_network.load_model(args.model, args.device, args.cpu_extension)
-
-    ### TODO: Handle the input stream ###
-    vid_capture = cv2.VideoCapture(args.input)
-    vid_capture.open(args.input)
+    prob_threshold = args.prob_threshold
+    
+    vid_capture = cv2.VideoCapture(input)
+    vid_capture.open(input)
     
     width = int(vid_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(vid_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(vid_capture.get(cv2.CAP_PROP_FPS))
     fcount = int(vid_capture.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    print('Video frame meta data: width:{}, height:{}, fps:{}, fcount:{}'.format(width, height, fps, fcount))
+    inputType = 'Image' if isImage else 'Video'
+    log.info('{} meta data: width:{}, height:{}, fps:{}, fcount:{}'.format(inputType, width, height, fps, fcount))
     
     input_shape = infer_network.get_input_shape()
     out = cv2.VideoWriter('out.mp4', 0x00000021, fps, (width,height))
     
     if( not vid_capture.isOpened()):
-        print("Error opening the video input")
+        log.error("Error opening the video input")
         return
     
+    model_error_frame_margin = 0 
+    MARGIN = 3
+    min_point = None
+    max_point = None
+    
+    total_people_count = 0
+    detected_frame_count = 0
     ### TODO: Loop until stream is over ###
     while(vid_capture.isOpened()):
         ### TODO: Read from the video capture ###
@@ -137,37 +157,62 @@ def infer_on_stream(args, client):
 
             ### TODO: Get the results of the inference request ###
             results = infer_network.get_output()
+            current_people_count = 0
+            
             for index, conf  in enumerate(results[0,0,:, 2]):
-                if(conf > args.prob_threshold): 
+                if(conf > prob_threshold and results[0, 0, index, 1] == 1): # Person detected with given confidence
+                    
+                    current_people_count  += 1
+                    detected_frame_count += 1
+                    
                     x_min = int(results[0, 0, index, 3] * frame.shape[1])
                     y_min = int(results[0, 0, index, 4] * frame.shape[0])
                     x_max = int(results[0, 0, index, 5] * frame.shape[1])
                     y_max = int(results[0, 0, index, 6] * frame.shape[0])
+
+                    min_point = (x_min,y_min)
+                    max_point = (x_max,y_max)
                     
-                    if(results[0, 0, index, 1] == 1):
-                        cv2.rectangle(frame, (x_min,y_min), (x_max,y_max), (255,0,0),  1) 
+                    latency = str(int(infer_network.get_latency())) + 'ms'
+                    
+                    cv2.rectangle(frame, min_point, max_point, (255,0,0),  1)
+                    data = 'Inference time: ' + latency
+                    cv2.putText(frame, data, (10, 50), cv2.FONT_HERSHEY_SIMPLEX,1,(209, 80, 0, 255),1)
+                    model_error_frame_margin = MARGIN
+                    
+            if(model_error_frame_margin > 0):
+                model_error_frame_margin -= 1
+                cv2.rectangle(frame, min_point, max_point, (255,0,0),  1)
+                detected_frame_count += 1
+            else:
+                detected_frame_count = 0
                         
-            
-            out.write(frame) # Write frame irrespective of result
-                    
+            if (isImage == False):
+                out.write(frame) # Write frame for debuggin           
 
-                    
-                    
-            ### TODO: Extract any desired stats from the results ###
+            if(client):
+                client.publish("person", json.dumps({
+                    "count": current_people_count,
+                    "total": total_people_count
+                }))
 
-            ### TODO: Calculate and send relevant information on ###
-            ### current_count, total_count and duration to the MQTT server ###
-            ### Topic "person": keys of "count" and "total" ###
-            ### Topic "person/duration": key of "duration" ###
+                duration = detected_frame_count / fps
+                client.publish("person/duration", json.dumps({
+                    "duration": duration
+                }))
 
         ### TODO: Send the frame to the FFMPEG server ###
+            sys.stdout.buffer.write(frame)
+            sys.stdout.flush()
 
         ### TODO: Write an output image if `single_image_mode` ###
+            if(isImage):
+                cv2.imwrite('InferenceOut.png', frame)
         else:
             break
-    
+            
     out.release()
-    print('Inference total latency in seconds: {}'.format(int(infer_network.get_latency()/1000)))
+    log.info('Inference total latency in seconds: {}'.format(int(infer_network.get_total_latency()/1000)))
 
 
 
@@ -177,6 +222,8 @@ def main():
 
     :return: None
     """
+    log.basicConfig(filename='debug.log')
+    log.info('test')
     # Grab command line args
     args = build_argparser().parse_args()
     # Connect to the MQTT server

@@ -51,25 +51,21 @@ class Network:
         self.net = IENetwork(model=model_path, weights=bin_path)
         self.input_key = next(iter(self.net.inputs.keys()))
         self.output_key = next(iter(self.net.outputs.keys()))
-        print('Model meta data: ')
-        print('\t input shape: {}'.format(self.net.inputs[self.input_key].shape))
-        print('\t output shape: {}'.format(self.net.outputs[self.output_key].shape))
+        log.info('Model meta data: ')
+        log.info('\t input shape: {}'.format(self.net.inputs[self.input_key].shape))
+        log.info('\t output shape: {}'.format(self.net.outputs[self.output_key].shape))
         self.plugin = IECore()
         self.plugin.add_extension(cpu_extension, device)
-        self.execNetwork = self.plugin.load_network(self.net, device)
         
         ### TODO: Check for supported layers ###
         layerMap = self.plugin.query_network(self.net, device_name =device)
         
         for layer in layerMap.keys():
             if (layer not in self.net.layers.keys()):
-                print("Unsupported layer found. Exiting")
+                log.error("Unsupported layer found. Exiting")
                 return
         
-        ### TODO: Add any necessary extensions ###
-        ### TODO: Return the loaded inference plugin ###
-        ### Note: You may need to update the function parameters. ###
-        return
+        self.execNetwork = self.plugin.load_network(self.net, device)
 
     def get_input_shape(self):
         ### TODO: Return the shape of the input layer ###
@@ -80,9 +76,6 @@ class Network:
         self.request_handle = self.execNetwork.start_async(0, inputs = {
             self.input_key : image
         })
-        ### TODO: Return any necessary information ###
-        ### Note: You may need to update the function parameters. ###
-        return
 
     def wait(self):
         ### TODO: Wait for the request to be complete. ###
@@ -97,4 +90,7 @@ class Network:
         return self.request_handle.outputs[self.output_key]
     
     def get_latency(self):
+        return self.request_handle.latency
+    
+    def get_total_latency(self):
         return self.latency
